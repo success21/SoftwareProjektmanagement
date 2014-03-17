@@ -26,7 +26,9 @@ public class FindFluxModules{
 		}
 			
 		try {
-			new JSBMLvisualizer(SBMLReader.read(new File(args[0])));
+			SBMLReader.read(new File("/home/guru/sp/Softwarepraktikum2/KEGGtranslatorV2.3.0/res/kgml/edh01230.xml"));
+			//new JSBMLvisualizer(SBMLReader.read(new File("/home/guru/sp/Softwarepraktikum2/KEGGtranslatorV2.3.0/res/kgml/edh01230.xml")));
+			new JSBMLvisualizer(SBMLReader.read(new File("/home/guru/Arbeitsfläche/blabla.xml")));
 		} catch (XMLStreamException | IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -36,7 +38,7 @@ public class FindFluxModules{
 		
 	}
 	
-
 	
+
 	
 }
