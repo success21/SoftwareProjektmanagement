@@ -17,8 +17,10 @@ public class TestSBML {
 		// does nothing
 	}
 	
+/*	
+	
 	@Test
-	public void numOfMetabolites(){
+	public void allMetabolitesInMatrix(){
 	double wus=0;
 	int error=0;
 	
@@ -45,4 +47,8 @@ public class TestSBML {
 	System.out.println(wus);
 	System.out.println(error);
 	}
+	
+*/
+	
+	
 }

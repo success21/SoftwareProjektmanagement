@@ -6,44 +6,114 @@ import java.io.IOException;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
 import javax.xml.stream.XMLStreamException;
+import lpsolve.LpSolveException;
+
 import org.sbml.jsbml.*;
 
+import scpsolver.constraints.LinearBiggerThanEqualsConstraint;
+import scpsolver.constraints.LinearSmallerThanEqualsConstraint;
+import scpsolver.lpsolver.LinearProgramSolver;
+import scpsolver.lpsolver.SolverFactory;
+import scpsolver.problems.LinearProgram;
 
+
+// boolean = s.getBoundaryCondition();
 
 public class FindFluxModules{
 	
 	
+	public static void findFlux(){
+		
+		//get values from SBMLLoad
+		int numR = SBMLLoad.getNumR();
+		int numS = SBMLLoad.getNumS();
+		Model m = SBMLLoad.getModel();
+		
+		//build matrix
+		double[][] rctMetArr = matrixBuild(numR,numS,met,m);
+		
+		
+		//find value for objective function
+		SBMLLoad.optimumReaction();
+		
+		//find optimum using LP
+		double[] k = gauss(rctMetArr,numR,numS,m,optPosInMet);
+				
+	}
+	public static void main(String args[]) throws XMLStreamException, IOException, LpSolveException{
+		
+		
+		
+		
+		
+		
+		
+		
+		for(double v: k){
+			System.out.println(v);
+		}
+		
+	System.out.println("finished");	
+	}	
 
-	public static void main(String args[]) throws XMLStreamException, IOException{
-		
-		File file = new File("/home/guru/Downloads/PLUSPARAMETERM_barkeri_iAF692.xml");
-		
-		//load the sbml document
-		System.out.println("Loading SBML Document...");
-		SBMLDocument d = SBMLReader.read(file);
-		Model m = d.getModel();
-		
-		
-		//create reference arrays for reactions and metabolites
-		int numR = m.getNumReactions();
-		int numS = m.getNumSpecies();
-		String[] rct = new String[m.getNumReactions()];
-		String[] met = new String[m.getNumSpecies()];
-		
-		for(int i=0;i<m.getNumReactions();i++){
-			Reaction r = m.getReaction(i);
-			String id = r.getId();
-			rct[i] = id;
+	//calculate optimum S*v=0. find all vectors which solve the equation and maximize x.
+	public static double[] gauss(double[][] matrix, int numR , int numS, Model m, int optPosInMet) throws LpSolveException {
+		double[] obj = new double[numR];
+		for(int i=0;i<numR;i++){
+			obj[i] = matrix[i][optPosInMet];
+		}
+		LinearProgram lp = new LinearProgram(obj); 
+	      
+		for(int i=0;i<numS;i++){		
+			double[] constraint = new double[numR];
+			for(int k=0;k<numR;k++){	
+				constraint[k] = matrix[k][i] ;				
+			}
+			if(i==optPosInMet){
+				continue;
+			}
+			else{
+				lp.addConstraint(new LinearBiggerThanEqualsConstraint(constraint, 0,null)); 
+				lp.addConstraint(new LinearSmallerThanEqualsConstraint(constraint, 0,null));
+			}
 		}
 		
-		for(int i=0;i<m.getNumSpecies();i++){
-			Species s = m.getSpecies(i);
-			String id = s.getId();
-			met[i] = id;
+		for(int k=0;k<numR;k++){	
+			double[] constraint = new double[numS];
+			for(int i=0;i<numS;i++){	
+				constraint[i] = matrix[k][i] ;				
+			}
+			Reaction r = m.getReaction(k);
+			boolean reversible = r.getReversible();
+			if(reversible){
+				lp.addConstraint(new LinearBiggerThanEqualsConstraint(constraint, -1000,null)); 
+				lp.addConstraint(new LinearSmallerThanEqualsConstraint(constraint, 1000,null));
+			}
+			else{
+				lp.addConstraint(new LinearBiggerThanEqualsConstraint(constraint, 0,null)); 
+				lp.addConstraint(new LinearSmallerThanEqualsConstraint(constraint, 1000,null));
+			}	
 		}
+	
+		lp.setMinProblem(true); 
+		LinearProgramSolver solver  = SolverFactory.newDefault(); 
+		double[] sol = solver.solve(lp);
+		
+		int c=0;
+		for(int i=0;i<sol.length;i++){
+			if(sol[i]!=0.0){
+				c++;
+			}
+		}
+		System.out.println(c+":"+numR+":"+sol.length);
+		return null;
+	}
+
+	//build matrix with reaction and metabolites	
+	public static double[][] matrixBuild(int numR,int numS, String[] met, Model m){
 		
 		//array with reactions and metabolites 
-		int[][] rctMetArr = new int[m.getNumReactions()][m.getNumSpecies()];
+		double[][] rctMetArr = new double[m.getNumReactions()][m.getNumSpecies()];
 		int count =0;
 		int correct = 0;
 		
@@ -59,7 +129,7 @@ public class FindFluxModules{
 						Species sp = s.getSpeciesInstance();
 						String id = sp.getId();
 						if(id == met[k]){
-							rctMetArr[i][k] = (int) -(r.getReactant(t).getStoichiometry()); correct++;
+							rctMetArr[i][k] = -(r.getReactant(t).getStoichiometry()); correct++;
 						}
 					}
 				int z = r.getNumProducts();
@@ -68,15 +138,13 @@ public class FindFluxModules{
 						Species sp = s.getSpeciesInstance();
 						String id = sp.getId();
 						if(id == met[k]){
-							rctMetArr[i][k] = (int) r.getProduct(t).getStoichiometry(); correct++;
+							rctMetArr[i][k] = r.getProduct(t).getStoichiometry(); correct++;
 						}
 					}
 			}
 		}
 		
-		
-		
-		/*
+/*
 		//prints matrix
 		for(int i=0;i<numR;i++){
 			for(int k=0;k<numS;k++){
@@ -84,17 +152,14 @@ public class FindFluxModules{
 			}
 			System.out.println();
 		}
-		*/
+*/		
 		
 		//tests
-		
-		
 		for(int i=0;i<numR;i++){					//all reactions
 			for(int k=0;k<numS;k++){
 				if(rctMetArr[i][k]!=0){
 					count++;
 				}
-				
 			}
 		}
 		double wus=0;
@@ -118,63 +183,9 @@ public class FindFluxModules{
 		}
 		
 		System.out.println(count+":"+correct+":"+wus+":"+error);
-		
-		
-		//go on with finding optimum
-		String optimum = optimumReaction(file);
-		int optPosInMet = 0;
-		for(int i=0;i<numS;i++){
-			if(optimum==met[i]){
-				optPosInMet = i;
-				break;
-			}
-		}
-		
-		gauss(rctMetArr, optPosInMet);
-		
-		
-	System.out.println("finished");	
-	}	
 
-	//calculate optimum S*v=0. find all vectors which solve the equation and maximize x.
-	public static void gauss(int[][] arr, int x) {
-		
-			
-		}
-
-
-	//find optimum "objective function". returns id of reaction.
-	public static String optimumReaction(File file) throws FileNotFoundException{
-	
-		Scanner scanner = new Scanner(file);
-		try {
-			String id = null;
-			while (scanner.hasNextLine()) {
-		    	String line = scanner.nextLine();
-		     
-		        if(line.contains("<reaction id=")){
-		        	Scanner scan = new Scanner(line);
-		        	scan.useDelimiter("\"");
-		        	scan.next();
-		        	id = scan.next();
-		        	scan.close();
-		        }
-		        if(line.contains("OBJECTIVE_COEFFICIENT") && line.contains("value=\"1\"")){
-		        	
-		        	System.out.println(id);
-		        	scanner.close();
-		        	return id;
-		        }
-		    }
-		} catch(NoSuchElementException e) { 
-		    System.out.println("Error searching for optimum reaction.");
-		}
-		
-		scanner.close();
-		return null;
-		
+		return rctMetArr;
 	}
-
 
 }
 
