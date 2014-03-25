@@ -8,124 +8,133 @@ import java.util.Scanner;
 
 import javax.xml.stream.XMLStreamException;
 
+import org.sbml.jsbml.KineticLaw;
+import org.sbml.jsbml.ListOf;
+import org.sbml.jsbml.LocalParameter;
 import org.sbml.jsbml.Model;
 import org.sbml.jsbml.Reaction;
 import org.sbml.jsbml.SBMLDocument;
 import org.sbml.jsbml.SBMLReader;
 import org.sbml.jsbml.Species;
 
+
+
 public class SBMLLoad {
+
+
+
 	
-	//getter...
+		//these variables get set by loadSBML
+			//number of reactions
+			private int numR;
+			//number of metabolites (species)
+			private int numS;
+			//model
+			private Model model;
+			//id's of all reactions
+			private  String[] rct;
+			//id's of all metabolites
+			private  String[] met;
+			//sbml file
+			private  File file;
+			//objectiveFunction
+			private double[] objectiveFunction;
+			
 	
-	
-	//these variables get set by loadSBML
-		//number of reactions
-		private static int numR;
-		public static int getNumR(){
-			return numR;
-		}
-		//number of metabolites (species)
-		private static int numS;
-		public static int getNumS(){
-			return numS;
-		}
-		//model
-		private static Model m;
-		public static Model getModel(){
-			return m;
-		}
-		//id's of all reactions
-		private static String[] rct;
-		public static String[] getReactions(){
-			return rct;
-		}
-		//id's of all metabolites
-		private static String[] met;
-		public static String[] getMetabolites(){
-			return met;
-		}
-	//these variables get set by optimumReaction
-		//position of optimum 
-		private static int optPosInMet = 0;
-		public static int getOptimal(){
-			return optPosInMet;
-		}
-		//id of optimum
-		private static String id = null;
-		public static String getOptimalId(){
-			return id;
-		}
+	//getter
+
+			public int getNumR() {
+						return numR;
+					}
+			public int getNumS() {
+				return numS;
+			}
+			public Model getModel() {
+				return model;
+			}
+			public String[] getRct(){ 
+				return rct;
+			}
+			public String[] getMet() {
+				return met;
+			}
+			public File getFile() {
+				return file;
+			}
+			public double[] getObjectiveFunction(){
+				return objectiveFunction;
+			}
+			
+			
+			
+			
+	//methods set the values
+			
 		
-		
-		
-	//setter
-	
 	//load model and set numR/numS and set 
-	public static void loadSBML(String path) throws XMLStreamException, IOException{
-		File file = new File("/home/guru/Downloads/S_aureus_iSB619.xml");
+	public void loadSBML(String path) throws XMLStreamException, IOException{
+		file = new File(path);
+		System.out.println("loading SBML file");
 		SBMLDocument d = SBMLReader.read(file);
-		Model m = d.getModel();
+		model = d.getModel();
 		
-		numR = m.getNumReactions();
-		numS = m.getNumSpecies();
+		numR = model.getNumReactions();
+		numS = model.getNumSpecies();
 		
-		rct = new String[m.getNumReactions()];
-		met = new String[m.getNumSpecies()];
+		rct = new String[model.getNumReactions()];
+		met = new String[model.getNumSpecies()];
 		
-		for(int i=0;i<m.getNumReactions();i++){
-			Reaction r = m.getReaction(i);
+		for(int i=0;i<model.getNumReactions();i++){
+			Reaction r = model.getReaction(i);
 			String id = r.getId();
 			rct[i] = id;
 		}
 		
-		for(int i=0;i<m.getNumSpecies();i++){
-			Species s = m.getSpecies(i);
+		for(int i=0;i<model.getNumSpecies();i++){
+			Species s = model.getSpecies(i);
 			String id = s.getId();
 			met[i] = id;
 		}
-	}
-	
-	
-	
-	//find position of metatolite in met[] for objective function
-	public static void optimumReaction(File file) throws FileNotFoundException{
 		
-		Scanner scanner = new Scanner(file);
-		try {
-			while (scanner.hasNextLine()) {
-		    	String line = scanner.nextLine();
-		     
-		        if(line.contains("<reaction id=")){
-		        	Scanner scan = new Scanner(line);
-		        	scan.useDelimiter("\"");
-		        	scan.next();
-		        	id = scan.next();
-		        	scan.close();
-		        }
-		        if(line.contains("OBJECTIVE_COEFFICIENT") && line.contains("value=\"1\"")){
-		        	
-		        	System.out.println(id);
-		        	scanner.close();
-		        	
-		        	break;
-		        }
-		    }
-		} catch(NoSuchElementException e) { 
-		    System.out.println("Error searching for optimum reaction.");
-		}
 		
-		scanner.close();
-
-		for(int i=0;i<numS;i++){
-			if(id==met[i]){
-				optPosInMet = i;
-				break;
+		//set objective function
+		objectiveFunction = new double[numR];
+		
+		for(int i=0;i<numR;i++){
+			Reaction r = model.getReaction(i);
+			KineticLaw k = r.getKineticLaw();
+			LocalParameter p = k.getLocalParameter("OBJECTIVE_COEFFICIENT");
+			double v = p.getValue();
+			
+			if(v==0.0){
+				objectiveFunction[i] = 0;
 			}
+			else{
+				objectiveFunction[i] = 1;
+				System.out.println("para: "+v);
+				System.out.println("rct: "+r.getId());
+			}
+			
 		}
 		
-	}
+		 
+		 
+		//test
+		if(model != null && numR !=0 && numS !=0 && (rct.length>0) && (met.length>0)){	}
+		else{System.out.println("Error load data in loadSBML."); System.exit(1);}
+			
+	}	
+	
 
 
+
+
+
+
+
+	
+	
+
+			
 	
 }

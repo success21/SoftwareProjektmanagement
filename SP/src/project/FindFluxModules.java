@@ -1,16 +1,13 @@
 package project;
 
-import java.io.File;
+
 import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.util.NoSuchElementException;
-import java.util.Scanner;
-import javax.xml.stream.XMLStreamException;
 import lpsolve.LpSolveException;
 
 import org.sbml.jsbml.*;
 
 import scpsolver.constraints.LinearBiggerThanEqualsConstraint;
+import scpsolver.constraints.LinearEqualsConstraint;
 import scpsolver.constraints.LinearSmallerThanEqualsConstraint;
 import scpsolver.lpsolver.LinearProgramSolver;
 import scpsolver.lpsolver.SolverFactory;
@@ -22,69 +19,55 @@ import scpsolver.problems.LinearProgram;
 public class FindFluxModules{
 	
 	
-	public static void findFlux(){
+	
+	
+	//findFlux: "main replacement"... call all needed methods
+	public static void findFlux(SBMLLoad load) throws LpSolveException, FileNotFoundException{
 		
 		//get values from SBMLLoad
-		int numR = SBMLLoad.getNumR();
-		int numS = SBMLLoad.getNumS();
-		Model m = SBMLLoad.getModel();
-		
+		int numR = load.getNumR();
+		int numS = load.getNumS();
+		Model m = load.getModel();
+		String[] met = load.getMet();
+		double[] objectiveFunction = load.getObjectiveFunction();
 		//build matrix
 		double[][] rctMetArr = matrixBuild(numR,numS,met,m);
 		
 		
-		//find value for objective function
-		SBMLLoad.optimumReaction();
-		
 		//find optimum using LP
-		double[] k = gauss(rctMetArr,numR,numS,m,optPosInMet);
-				
-	}
-	public static void main(String args[]) throws XMLStreamException, IOException, LpSolveException{
-		
-		
-		
-		
-		
-		
-		
-		
-		for(double v: k){
-			System.out.println(v);
-		}
-		
-	System.out.println("finished");	
+		double[] k = optimize(rctMetArr,numR,numS,m,objectiveFunction);
+
 	}	
 
+	
+	
 	//calculate optimum S*v=0. find all vectors which solve the equation and maximize x.
-	public static double[] gauss(double[][] matrix, int numR , int numS, Model m, int optPosInMet) throws LpSolveException {
-		double[] obj = new double[numR];
-		for(int i=0;i<numR;i++){
-			obj[i] = matrix[i][optPosInMet];
-		}
-		LinearProgram lp = new LinearProgram(obj); 
+	public static double[] optimize(double[][] matrix, int numR , int numS, Model m, double[] objectiveFunction) throws LpSolveException {
+		LinearProgram lp = new LinearProgram(objectiveFunction); 
 	      
 		for(int i=0;i<numS;i++){		
 			double[] constraint = new double[numR];
 			for(int k=0;k<numR;k++){	
 				constraint[k] = matrix[k][i] ;				
 			}
-			if(i==optPosInMet){
+			Species s = m.getSpecies(i);
+			if(s.getBoundaryCondition()){
 				continue;
 			}
 			else{
-				lp.addConstraint(new LinearBiggerThanEqualsConstraint(constraint, 0,null)); 
-				lp.addConstraint(new LinearSmallerThanEqualsConstraint(constraint, 0,null));
+				lp.addConstraint(new LinearEqualsConstraint(constraint, 0,null)); 
 			}
 		}
-		
+
 		for(int k=0;k<numR;k++){	
-			double[] constraint = new double[numS];
-			for(int i=0;i<numS;i++){	
-				constraint[i] = matrix[k][i] ;				
-			}
+			double[] constraint = new double[numR]; 
+			
+			constraint[k]=1;
+
 			Reaction r = m.getReaction(k);
 			boolean reversible = r.getReversible();
+			
+			
 			if(reversible){
 				lp.addConstraint(new LinearBiggerThanEqualsConstraint(constraint, -1000,null)); 
 				lp.addConstraint(new LinearSmallerThanEqualsConstraint(constraint, 1000,null));
@@ -95,7 +78,7 @@ public class FindFluxModules{
 			}	
 		}
 	
-		lp.setMinProblem(true); 
+		lp.setMinProblem(false); 
 		LinearProgramSolver solver  = SolverFactory.newDefault(); 
 		double[] sol = solver.solve(lp);
 		
@@ -105,6 +88,7 @@ public class FindFluxModules{
 				c++;
 			}
 		}
+		//System.out.println("biomass: "+ sol[optPosInMet]);
 		System.out.println(c+":"+numR+":"+sol.length);
 		return null;
 	}
@@ -113,7 +97,7 @@ public class FindFluxModules{
 	public static double[][] matrixBuild(int numR,int numS, String[] met, Model m){
 		
 		//array with reactions and metabolites 
-		double[][] rctMetArr = new double[m.getNumReactions()][m.getNumSpecies()];
+		double[][] rctMetArr = new double[numR][numS];
 		int count =0;
 		int correct = 0;
 		
@@ -152,7 +136,7 @@ public class FindFluxModules{
 			}
 			System.out.println();
 		}
-*/		
+*/	
 		
 		//tests
 		for(int i=0;i<numR;i++){					//all reactions
@@ -187,6 +171,9 @@ public class FindFluxModules{
 		return rctMetArr;
 	}
 
+	
+	
+	
 }
 
 
