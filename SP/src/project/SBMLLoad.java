@@ -1,15 +1,11 @@
 package project;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.NoSuchElementException;
-import java.util.Scanner;
 
 import javax.xml.stream.XMLStreamException;
 
 import org.sbml.jsbml.KineticLaw;
-import org.sbml.jsbml.ListOf;
 import org.sbml.jsbml.LocalParameter;
 import org.sbml.jsbml.Model;
 import org.sbml.jsbml.Reaction;
@@ -22,8 +18,6 @@ import org.sbml.jsbml.Species;
 public class SBMLLoad {
 
 
-
-	
 		//these variables get set by loadSBML
 			//number of reactions
 			private int numR;
@@ -39,8 +33,10 @@ public class SBMLLoad {
 			private  File file;
 			//objectiveFunction
 			private double[] objectiveFunction;
-			
-	
+			//upper bound and lower bound
+			private double[] lowerBound;
+			private double[] upperBound;
+			private int biomassOptValuePos;
 	//getter
 
 			public int getNumR() {
@@ -64,14 +60,18 @@ public class SBMLLoad {
 			public double[] getObjectiveFunction(){
 				return objectiveFunction;
 			}
+			public double[] getLowerBound(){
+				return lowerBound;
+			}
+			public double[] getUpperBound(){
+				return upperBound;
+			}
+			public int getBiomassOptValuePos() {
+				return biomassOptValuePos;
+			}
 			
 			
-			
-			
-	//methods set the values
-			
-		
-	//load model and set numR/numS and set 
+	//load model
 	public void loadSBML(String path) throws XMLStreamException, IOException{
 		file = new File(path);
 		System.out.println("loading SBML file");
@@ -97,44 +97,41 @@ public class SBMLLoad {
 		}
 		
 		
-		//set objective function
+		//set objective function, set lower and upper bound
 		objectiveFunction = new double[numR];
-		
+		lowerBound = new double[numR];
+		upperBound = new double[numR];
+int count =0;		
 		for(int i=0;i<numR;i++){
 			Reaction r = model.getReaction(i);
 			KineticLaw k = r.getKineticLaw();
-			LocalParameter p = k.getLocalParameter("OBJECTIVE_COEFFICIENT");
-			double v = p.getValue();
+			LocalParameter p1 = k.getLocalParameter("OBJECTIVE_COEFFICIENT");
+			LocalParameter p2 = k.getLocalParameter("LOWER_BOUND");
+			LocalParameter p3 = k.getLocalParameter("UPPER_BOUND");
 			
+			double v = p1.getValue();
+			
+			lowerBound[i] = p2.getValue();
+			upperBound[i] = p3.getValue();
+			
+
 			if(v==0.0){
 				objectiveFunction[i] = 0;
 			}
 			else{
 				objectiveFunction[i] = 1;
+				biomassOptValuePos = i;
 				System.out.println("para: "+v);
 				System.out.println("rct: "+r.getId());
 			}
 			
 		}
-		
 		 
 		 
 		//test
 		if(model != null && numR !=0 && numS !=0 && (rct.length>0) && (met.length>0)){	}
 		else{System.out.println("Error load data in loadSBML."); System.exit(1);}
 			
-	}	
-	
+	}
 
-
-
-
-
-
-
-	
-	
-
-			
-	
 }

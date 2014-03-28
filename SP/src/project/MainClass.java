@@ -5,9 +5,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 
 import javax.xml.stream.XMLStreamException;
-
-import org.sbml.jsbml.Model;
-
 import lpsolve.LpSolveException;
 
 

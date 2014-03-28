@@ -2,16 +2,20 @@ package project;
 
 
 import java.io.FileNotFoundException;
+import java.util.ArrayList;
+
 import lpsolve.LpSolveException;
 
 import org.sbml.jsbml.*;
 
 import scpsolver.constraints.LinearBiggerThanEqualsConstraint;
+import scpsolver.constraints.LinearConstraint;
 import scpsolver.constraints.LinearEqualsConstraint;
 import scpsolver.constraints.LinearSmallerThanEqualsConstraint;
 import scpsolver.lpsolver.LinearProgramSolver;
 import scpsolver.lpsolver.SolverFactory;
 import scpsolver.problems.LinearProgram;
+import scpsolver.util.SparseMatrix;
 
 
 // boolean = s.getBoundaryCondition();
@@ -30,25 +34,114 @@ public class FindFluxModules{
 		Model m = load.getModel();
 		String[] met = load.getMet();
 		double[] objectiveFunction = load.getObjectiveFunction();
+		int biomassOptValuePos = load.getBiomassOptValuePos();
+		double[] low = load.getLowerBound();
+		double[] upp = load.getUpperBound();
+		
 		//build matrix
-		double[][] rctMetArr = matrixBuild(numR,numS,met,m);
+		SparseMatrix rctMetArr = matrixBuild(numR,numS,met,m);
+		
 		
 		
 		//find optimum using LP
-		double[] k = optimize(rctMetArr,numR,numS,m,objectiveFunction);
-
+		System.out.println("Loading LP Solver");
+		LinearProgramSolver solver  = SolverFactory.newDefault(); 
+		double biomassOptValue = 0;
+		double[] vBiomass = optimize(biomassOptValuePos,biomassOptValue,solver, rctMetArr,numR,numS,m,objectiveFunction,low,upp);
+		
+		//find min max values
+		minMax(biomassOptValue,vBiomass,solver,numR,numS,m,objectiveFunction,low,upp, rctMetArr);
 	}	
 
+	//calcualte min and max values for each reaction
+	public static void minMax(double biomassOptValue, double[] firstVector, LinearProgramSolver solver, int numR, int numS, Model m, double[] objectiveFunction, double[] low, double[] upp, SparseMatrix rctMetArr){
+		
+		//set constraints
+		ArrayList<LinearConstraint> con = new ArrayList<LinearConstraint>();
+			for(int i=0;i<numS;i++){		
+				double[] constraint = new double[numR];
+				for(int k=0;k<numR;k++){	
+					constraint[k] = rctMetArr.get(k,i) ;				
+				}
+				Species s = m.getSpecies(i);
+				if(s.getBoundaryCondition()){
+					continue;
+				}
+				else{
+					LinearConstraint lincon = (new LinearEqualsConstraint(constraint, 0,null));
+					con.add(lincon);
+					
+				}
+			}
+			
+			for(int k=0;k<numR;k++){	
+				double[] constraint = new double[numR]; 			
+				constraint[k]=1;
+				if(low[k]<-1003.0 && upp[k]>1003.0){
+					low[k]=-1000.0;
+					upp[k]=1000;
+				}
+				else{
+					upp[k]=1000;
+				}	
+				LinearConstraint bigcon = (new LinearBiggerThanEqualsConstraint(constraint, low[k],null));
+				LinearConstraint smalcon = (new LinearSmallerThanEqualsConstraint(constraint, upp[k],null));
+				con.add(bigcon);
+				con.add(smalcon);
+			}
+			
+		//biomass as a constraint
+			LinearConstraint biomass = (new LinearEqualsConstraint(objectiveFunction, biomassOptValue,"OptBiomass"));
+			con.add(biomass);
+			
+			
+			
+			
+		//set objective function and detect differences for each reaction, to find V
+		double[] isNotConstant = objectiveFunction;
+		
+		for(int r=0;r<numR;r++){
+			if(isNotConstant[r] != 1.0){
+			double[] newObjective = new double[numR];
+			newObjective[r] = 1;
+			
+			LinearProgram lp = new LinearProgram(newObjective);
+			lp.addConstraints(con);
+			lp.setMinProblem(false); 
+			double[] solved = solver.solve(lp);
+
+			for(int w=0;w<numR;w++){
+				System.out.print(solved[w]+" ");
+			}
+			System.out.println();
+			
+int count=0;
+for(int zu=0;zu<numR;zu++){
+	if(solved[zu] != 0){
+		count++;
+	}
 	
+	for(int e=0;e<numR;e++){
+		if(firstVector[e] !=  solved[e] ){
+			isNotConstant[e] = 1.0;
+		}
+	}
+	
+}
+System.out.println("#!=0: " + count + " /Number: " + r);	
+			} 
+		}		
+	}
 	
 	//calculate optimum S*v=0. find all vectors which solve the equation and maximize x.
-	public static double[] optimize(double[][] matrix, int numR , int numS, Model m, double[] objectiveFunction) throws LpSolveException {
+	public static double[] optimize(int biomassOptValuePos, double biomassOptValue, LinearProgramSolver solver, SparseMatrix rctMetArr, int numR , int numS, Model m, double[] objectiveFunction, double[] low, double[]upp) throws LpSolveException {
+		
 		LinearProgram lp = new LinearProgram(objectiveFunction); 
-	      
+	      System.out.println("blau");	      
 		for(int i=0;i<numS;i++){		
 			double[] constraint = new double[numR];
 			for(int k=0;k<numR;k++){	
-				constraint[k] = matrix[k][i] ;				
+				constraint[k] = rctMetArr.get(k,i) ;				
 			}
 			Species s = m.getSpecies(i);
 			if(s.getBoundaryCondition()){
@@ -60,46 +153,53 @@ public class FindFluxModules{
 		}
 
 		for(int k=0;k<numR;k++){	
-			double[] constraint = new double[numR]; 
-			
+			double[] constraint = new double[numR]; 			
 			constraint[k]=1;
-
 			Reaction r = m.getReaction(k);
-			boolean reversible = r.getReversible();
-			
-			
-			if(reversible){
-				lp.addConstraint(new LinearBiggerThanEqualsConstraint(constraint, -1000,null)); 
-				lp.addConstraint(new LinearSmallerThanEqualsConstraint(constraint, 1000,null));
+	
+			if(low[k]<-1003.0 && upp[k]>1003.0){
+				low[k]=-1000.0;
+				upp[k]=1000;
 			}
 			else{
-				lp.addConstraint(new LinearBiggerThanEqualsConstraint(constraint, 0,null)); 
-				lp.addConstraint(new LinearSmallerThanEqualsConstraint(constraint, 1000,null));
-			}	
+				upp[k]=1000;
+			}			
+			lp.addConstraint(new LinearBiggerThanEqualsConstraint(constraint, low[k],null)); 
+			lp.addConstraint(new LinearSmallerThanEqualsConstraint(constraint, upp[k],null));
 		}
-	
+
 		lp.setMinProblem(false); 
-		LinearProgramSolver solver  = SolverFactory.newDefault(); 
+		
 		double[] sol = solver.solve(lp);
 		
-		int c=0;
-		for(int i=0;i<sol.length;i++){
-			if(sol[i]!=0.0){
-				c++;
-			}
+		for(int i=0;i<numR;i++){
+			System.out.print(sol[i]+" ");
 		}
-		//System.out.println("biomass: "+ sol[optPosInMet]);
-		System.out.println(c+":"+numR+":"+sol.length);
-		return null;
+		biomassOptValue = sol[biomassOptValuePos];
+	
+System.out.println("\nbiomassOptValue: " + biomassOptValue);
+int count=0;
+for(int zu=0;zu<numR;zu++){
+	if(sol[zu] != 0){
+		count++;
+	}
+}
+System.out.println("#!=0: " + count);
+
+		
+		return sol;
 	}
 
 	//build matrix with reaction and metabolites	
-	public static double[][] matrixBuild(int numR,int numS, String[] met, Model m){
-		
+	public static SparseMatrix matrixBuild(int numR,int numS, String[] met, Model m){
+		SparseMatrix rctMetArr= new SparseMatrix(numR,numS);
 		//array with reactions and metabolites 
-		double[][] rctMetArr = new double[numR][numS];
+		//double[][] rctMetArr = new double[numR][numS];
 		int count =0;
 		int correct = 0;
+		
+
+		
 		
 		System.out.println("Creating Reaction/Metabolites Matrix...");
 		//calculates the values of rctMetArr
@@ -113,7 +213,7 @@ public class FindFluxModules{
 						Species sp = s.getSpeciesInstance();
 						String id = sp.getId();
 						if(id == met[k]){
-							rctMetArr[i][k] = -(r.getReactant(t).getStoichiometry()); correct++;
+							rctMetArr.set(i,k,-(r.getReactant(t).getStoichiometry())); correct++;
 						}
 					}
 				int z = r.getNumProducts();
@@ -122,7 +222,7 @@ public class FindFluxModules{
 						Species sp = s.getSpeciesInstance();
 						String id = sp.getId();
 						if(id == met[k]){
-							rctMetArr[i][k] = r.getProduct(t).getStoichiometry(); correct++;
+							rctMetArr.set(i,k,r.getProduct(t).getStoichiometry()); correct++;
 						}
 					}
 			}
@@ -141,7 +241,7 @@ public class FindFluxModules{
 		//tests
 		for(int i=0;i<numR;i++){					//all reactions
 			for(int k=0;k<numS;k++){
-				if(rctMetArr[i][k]!=0){
+				if(rctMetArr.get(i,k)!=0){
 					count++;
 				}
 			}
@@ -166,7 +266,7 @@ public class FindFluxModules{
 			}
 		}
 		
-		System.out.println(count+":"+correct+":"+wus+":"+error);
+//System.out.println(count+":"+correct+":"+wus+":"+error);
 
 		return rctMetArr;
 	}
